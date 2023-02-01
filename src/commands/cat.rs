@@ -2,7 +2,7 @@ pub fn cat(input: &Option<Vec<String>>, output: Option<&str>) {
     let iowtr: Box<dyn std::io::Write> = match output {
         None => Box::new(std::io::stdout()),
         Some("-") => Box::new(std::io::stdout()),
-        Some(o) => Box::new(std::fs::File::open(o).expect("unable to create output file"))
+        Some(o) => Box::new(std::fs::File::create(o).expect("unable to create output file"))
     };
 
     let mut iordrs:Vec<Box<dyn std::io::Read>> = vec![];
