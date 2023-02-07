@@ -35,6 +35,7 @@ pub fn cat(input: &Option<Vec<String>>, list: Option<&str>, output: Option<&str>
         if files.len() > 1 { panic!("can not read from stdin and line") }
         let rdr = std::io::BufReader::new(std::io::stdin());
         let metrics: pqc::Metrics = serde_json::from_reader(rdr).expect("");
+        metrics.to_csv(iowtr);
     } else {
         let mut count: i32 = 0;
         let rdr = std::io::BufReader::new(std::fs::File::open(&files[0]).expect("couldnt open input file"));
@@ -48,6 +49,6 @@ pub fn cat(input: &Option<Vec<String>>, list: Option<&str>, output: Option<&str>
                 eprintln!("{} done", count);
             }
         }
+        metrics.to_csv(iowtr);
     }
-    metrics.to_csv(iowtr);
 }
