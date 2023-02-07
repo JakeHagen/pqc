@@ -27,6 +27,8 @@ enum Commands {
     Cat {
         input: Option<Vec<String>>,
         #[clap(long, short)]
+        list: Option<String>,
+        #[clap(long, short)]
         output: Option<String>,
     }
 }
@@ -38,8 +40,8 @@ fn main() {
         Commands::QC { input, output, field, rare, gq, threads } => {
             qc::qc(input.as_deref(), output.as_deref(), field, rare, gq, threads)
         },
-        Commands::Cat { input, output } => {
-            cat::cat(input, output.as_deref())
+        Commands::Cat { input, list, output } => {
+            cat::cat(input, list.as_deref(), output.as_deref())
         },
     }
 }
