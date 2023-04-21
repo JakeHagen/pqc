@@ -15,6 +15,12 @@ fn check_is_variant(gts: &Vec<&[i32]>) {
     }
 }
 
+fn add_matrix_nd() {
+    let mut a = ndarray::Array2::<i32>::zeros((1000,7));
+    let b = ndarray::Array2::<i32>::zeros((1000,7));
+    a += &b;
+}
+
 fn bench_create_data(c: &mut Criterion) {
     let mut group = c.benchmark_group("create_data");
     //for i in [1000, 10000].iter() {
@@ -38,6 +44,7 @@ fn bench_create_data(c: &mut Criterion) {
         genotypes.push(&[0,4]);
     }
     group.bench_function("check_is_variant", |b| b.iter(|| check_is_variant(&genotypes)));
+    group.bench_function("concat", |b| b.iter(|| add_matrix_nd()));
     group.finish();
 }
 
