@@ -18,6 +18,7 @@ pub fn cat(input: &Option<Vec<String>>, list: Option<&str>, output: Option<&str>
                             }
                             files.push("-".to_owned())
                         }
+                        files.push(f.to_owned());
                     }
                 }
             }

@@ -1,4 +1,5 @@
 use std::str;
+use ndarray::OwnedRepr;
 use phf::phf_map;
 use serde::{Serialize, Deserialize};
 
@@ -77,50 +78,18 @@ pub fn is_variant(gt: &[i32]) -> (bool, usize) {
 
 const NVARS: usize = 0;
 const NSNVS: usize = 1;
-const NINDELS: usize = 1;
-const NHETS: usize = 1;
-const NHOMALTS: usize = 1;
-const NTIS: usize = 1;
-const NTVS: usize = 1;
+const NINDELS: usize = 2;
+const NHETS: usize = 3;
+const NHOMALTS: usize = 4;
+const NTIS: usize = 5;
+const NTVS: usize = 6;
 
-pub fn create_variant_array(gt: &[i32], alleles: &Vec<&[u8]>) -> [i32;7] {
-    let mut a = [0,0,0,0,0,0,0];
-    // this ignores -1/1 GTs, will see how it affects performance
-    //if !is_variant(gt) {
-    //    return a
-    //}
-    let (is_var, vidx) = is_variant(gt);
-    if !is_var { return a }
+pub const RAW: usize = 0;
+pub const QUAL: usize = 1;
+pub const RARE: usize = 2;
+pub const QUAL_RARE: usize = 3;
 
-    // add to n_vars
-    a[NVARS] += 1;
-
-    
-    if is_snv(decode_genotype(gt[vidx]), &alleles) {
-        // add to n_snvs
-        a[NSNVS] += 1;
-        if is_ti(alleles[0], alleles[decode_genotype(gt[vidx]) as usize]) {
-            // add to n_tis
-            a[NTIS] += 1
-        } else {
-            // add to n_tvs
-            a[NTVS] += 1
-        }
-    } else {
-        // add to n_indels
-        a[NINDELS] += 1;
-    }
-
-    if is_hom(gt) {
-        // add to n_hom_alts
-        a[NHOMALTS] += 1
-    } else {
-        // add to n_hets
-        a[NHETS] += 1
-    }
-    return a
-}
-
+/*
 #[derive(Serialize, Deserialize)]
 pub struct Metrics {
     gq: i32,
@@ -215,6 +184,98 @@ impl Metrics {
                 &format!("{}", self.qual[sidx][NVARS]), &format!("{}", self.qual[sidx][NSNVS]), &format!("{}", self.qual[sidx][NINDELS]), &format!("{}", self.qual[sidx][NHETS]), &format!("{}", self.qual[sidx][NHOMALTS]), &format!("{}", self.qual[sidx][NTIS]), &format!("{}", self.qual[sidx][NTVS]),
                 &format!("{}", self.rare[sidx][NVARS]), &format!("{}", self.rare[sidx][NSNVS]), &format!("{}", self.rare[sidx][NINDELS]), &format!("{}", self.rare[sidx][NHETS]), &format!("{}", self.rare[sidx][NHOMALTS]), &format!("{}", self.rare[sidx][NTIS]), &format!("{}", self.rare[sidx][NTVS]),
                 &format!("{}", self.qual_rare[sidx][NVARS]), &format!("{}", self.qual_rare[sidx][NSNVS]), &format!("{}", self.qual_rare[sidx][NINDELS]), &format!("{}", self.qual_rare[sidx][NHETS]), &format!("{}", self.qual_rare[sidx][NHOMALTS]), &format!("{}", self.qual_rare[sidx][NTIS]), &format!("{}", self.qual_rare[sidx][NTVS]),
+            ]);
+        }
+    }
+}
+*/
+#[derive(Serialize, Deserialize)]
+pub struct Metrics {
+    gq: i32,
+    freq: f32,
+    population: String,
+    samples: Vec<String>,
+    data: ndarray::ArrayBase<OwnedRepr<i32>, ndarray::Dim<[usize; 3]>>,
+}
+
+impl Metrics {
+    pub fn new(samples: Vec<String>, gq: i32, freq: f32, population: String) -> Metrics {
+        let ns = samples.len();
+        return Metrics {
+            gq,
+            freq,
+            population,
+            samples,
+            data: ndarray::Array3::<i32>::zeros((ns,7,4)),
+        }
+    }
+
+    pub fn update(&mut self, sidx: usize, m: usize, gt: &[i32], alleles: &Vec<&[u8]>) {
+        // this ignores -1/1 GTs, will see how it affects performance
+        //if !is_variant(gt) {
+        //    return a
+        //}
+        let (is_var, vidx) = is_variant(gt);
+        if !is_var { return }
+    
+        // add to n_vars
+        self.data[[sidx, NVARS, m]] += 1;
+    
+        
+        if is_snv(decode_genotype(gt[vidx]), &alleles) {
+            // add to n_snvs
+            self.data[[sidx, NSNVS, m]] += 1;
+            if is_ti(alleles[0], alleles[decode_genotype(gt[vidx]) as usize]) {
+                // add to n_tis
+                self.data[[sidx, NTIS, m]] += 1
+            } else {
+                // add to n_tvs
+                self.data[[sidx, NTVS, m]] += 1
+            }
+        } else {
+            // add to n_indels
+            self.data[[sidx, NINDELS, m]] += 1;
+        }
+    
+        if is_hom(gt) {
+            // add to n_hom_alts
+            self.data[[sidx, NHOMALTS, m]] += 1
+        } else {
+            // add to n_hets
+            self.data[[sidx, NHETS, m]] += 1
+        }
+    }
+    
+    pub fn cat(&mut self, metrics: Metrics) {
+        if self.gq != metrics.gq {
+            panic!("GQ thresholds do not match");
+        }
+        if self.freq != metrics.freq {
+            panic!("Rarity thresholds do not match");
+        }
+        if self.population != metrics.population {
+            panic!("The population AF source does not match");
+        }
+        if self.samples != metrics.samples {
+            panic!("Samples do not match");
+        }
+        self.data += &metrics.data;
+    }
+    
+    pub fn to_csv(self, iowtr: Box<dyn std::io::Write>) {
+        let mut wtr = csv::WriterBuilder::new().has_headers(false).from_writer(iowtr);
+        _ = wtr.write_record(&[
+            "sample", "n_vars", "n_snvs", "n_indels", "n_hets", "n_hom_alts", "n_tis", "n_tvs",
+            &format!("gq{}_n_vars", self.gq), &format!("gq{}_n_snvs", self.gq), &format!("gq{}_n_indels", self.gq), &format!("gq{}_n_hets", self.gq), &format!("gq{}_n_hom_alts", self.gq), &format!("gq{}_n_tis", self.gq), &format!("gq{}_n_tvs", self.gq),
+            &format!("{}{}_n_vars", self.population, self.freq), &format!("{}{}_n_snvs", self.population, self.freq), &format!("{}{}_n_indels", self.population, self.freq), &format!("{}{}_n_hets", self.population, self.freq), &format!("{}{}_n_hom_alts", self.population, self.freq), &format!("{}{}_n_tis", self.population, self.freq), &format!("{}{}_n_tvs", self.population, self.freq),
+            &format!("gq{}_{}{}_n_vars", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_snvs", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_indels", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_hets", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_hom_alts", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_tis", self.gq, self.population, self.freq), &format!("gq{}_{}{}_n_tvs", self.gq, self.population, self.freq),
+        ]);
+        for sidx in 0..self.samples.len() {
+            _ = wtr.write_record(&[
+                &self.samples[sidx], &format!("{}", self.data[[sidx, NVARS, RAW]]), &format!("{}", self.data[[sidx, NSNVS, RAW]]), &format!("{}", self.data[[sidx, NINDELS, RAW]]), &format!("{}", self.data[[sidx, NHETS, RAW]]), &format!("{}", self.data[[sidx, NHOMALTS, RAW]]), &format!("{}", self.data[[sidx, NTIS, RAW]]), &format!("{}", self.data[[sidx, NTVS, RAW]]),
+                &format!("{}", self.data[[sidx, NVARS, QUAL]]), &format!("{}", self.data[[sidx, NSNVS, QUAL]]), &format!("{}", self.data[[sidx, NINDELS, QUAL]]), &format!("{}", self.data[[sidx, NHETS, QUAL]]), &format!("{}", self.data[[sidx, NHOMALTS, QUAL]]), &format!("{}", self.data[[sidx, NTIS, QUAL]]), &format!("{}", self.data[[sidx, NTVS, QUAL]]),
+                &format!("{}", self.data[[sidx, NVARS, RARE]]), &format!("{}", self.data[[sidx, NSNVS, RARE]]), &format!("{}", self.data[[sidx, NINDELS, RARE]]), &format!("{}", self.data[[sidx, NHETS, RARE]]), &format!("{}", self.data[[sidx, NHOMALTS, RARE]]), &format!("{}", self.data[[sidx, NTIS, RARE]]), &format!("{}", self.data[[sidx, NTVS, RARE]]),
+                &format!("{}", self.data[[sidx, NVARS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NSNVS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NINDELS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NHETS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NHOMALTS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NTIS, QUAL_RARE]]), &format!("{}", self.data[[sidx, NTVS, QUAL_RARE]]),
             ]);
         }
     }

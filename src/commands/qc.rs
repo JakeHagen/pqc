@@ -25,6 +25,7 @@ pub fn qc(
         string_samples.push(String::from_utf8(s.to_vec()).unwrap())
     }
 
+    //let mut metrics = pqc::Metrics::new(string_samples, *gq, *rare, field.to_string());
     let mut metrics = pqc::Metrics::new(string_samples, *gq, *rare, field.to_string());
 
     for record_result in bcf.records() {
@@ -35,18 +36,16 @@ pub fn qc(
         let gqs = record.format(b"GQ").integer().expect("Couldn't retrieve GQ field");
         let gts = record.format(b"GT").integer().expect("Couldn't retrieve GT field");
 
-        
         for sidx in 0..n_samples {
-            let arr = pqc::create_variant_array(gts[sidx], &alleles);
-            metrics.add_raw(sidx, &arr);
+            metrics.update(sidx, pqc::RAW, gts[sidx], &alleles);
             if pf <= *rare {
-                metrics.add_rare(sidx, &arr);
+                metrics.update(sidx, pqc::RARE, gts[sidx], &alleles);
             }
             if gqs[sidx][0] >= *gq {
-                metrics.add_qual(sidx, &arr);
+                metrics.update(sidx, pqc::QUAL, gts[sidx], &alleles);
             }
             if pf <= *rare && gqs[sidx][0] >= *gq {
-                metrics.add_qual_rare(sidx, &arr);
+                metrics.update(sidx, pqc::QUAL_RARE, gts[sidx], &alleles);
             }
         }
     }
